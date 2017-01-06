@@ -1,9 +1,9 @@
 #!/usr/bin/python
 # -*- coding: utf_8 -*-
 
-# Name: Data Miner (dataMiner.py)
+# Name: File Sorter (fileSorter.py)
 # By: Dennis Drescher (dennis.drescher.86@gmail.com)
-# Last edited: 3 Dec 2016
+# Last edited: 8 Dec 2016
 
 #    Copyright 2016, Dennis Drescher
 #    All rights reserved.
@@ -22,22 +22,23 @@
 ######################### Description/Documentation ###########################
 ###############################################################################
 
-# Providing a couple basic paramters, this script will copy or move files from
-# a set of files. It will walk a tree and choose files that meet the paramters
-# provided. It has a test mode so it can do a dry run to see how many files and
-# folders will be created. Remember, its miner, not minor. :-)
+# This script is part of the Data Miner package. Its primary purpose is to
+# troll through a set of files that have come from Photorec or a tool like it.
+# It will sort files by file type and create folders that will hold a specified
+# number of files.
 
 ###############################################################################
 ################################ Initialize ###################################
 ###############################################################################
 
 # Import all needed Python libs
-import codecs, shutil, os, sys, argparse, timeit, hashlib
+import codecs, shutil, os, sys, argparse, timeit
+from collections import defaultdict
 from datetime import datetime
 from datetime import timedelta
 
 # Set some global vars here
-scriptName      = 'dataMiner'
+scriptName      = 'fileSorter'
 scriptVersion   = '0.01'
 startTime       = timeit.default_timer()
 
@@ -54,17 +55,6 @@ print '\n\t\tWelcome to ' + scriptName + ' ' + scriptVersion
 ###############################################################################
 
 # Define functions
-
-
-def md5sum (fname) :
-    '''Get an md5 sum on a file.'''
-
-    hash_md5 = hashlib.md5()
-    with open(fname, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
-
 
 def tStamp () :
     '''Create a simple time stamp for logging and timing purposes.'''
@@ -99,95 +89,75 @@ def terminal (msg) :
     print wordWrap(msg, 60).encode(sys.getfilesystemencoding())
 
 
-def writeToLog (msg, log) :
-    '''Write to the session log file.'''
+def sorter (sourcePath, targetPath, mode) :
+    '''Organize the files by type. If fileType is omitted, it will arrange
+    all the files in the data set by type.'''
 
-    try :
-        # Because we want to read errors from top to bottom, we don't pre append
-        # them to the error log file.
-        if not os.path.isfile(log) :
-            writeObject = codecs.open(log, "w", encoding='utf_8')
-        else :
-            writeObject = codecs.open(log, "a", encoding='utf_8')
-
-        # Write and close
-        writeObject.write(msg + '\n')
-        writeObject.close()
-    except :
-        terminal('Error writing this event to error log: ' + msg)
-
-    return
-
-
-def dig (sourcePath, targetPath, fileType, sizeMultiplier='bt', fileSize=1, targetDirs=None, mode='test', log=None) :
-    '''Dig is what we do and the ground (source) is where the data is. This
-    starts the process and from here we find the data, sift through it and
-    then move or copy it to where we need it to go.'''
-
-    # Use float() rather than int() so decimals can be used in file sizes
-    fs = float(fileSize)
-    totalFiles = 0
+    fileType = []
+    typeDic = defaultdict(list)
     fileCount = 0
+    totalFiles = 0
     dirCount = 1
+    maxFiles = 100
+    ext = ''
 
-    # Set up the target dir if needed
-    if targetDirs :
-        targetDirs = int(targetDirs)
-        curDir = os.path.join(targetPath, 'dir_' + str(dirCount).zfill(3))
-        if not os.path.isdir(curDir) :
-            if mode != 'test' :
-                os.mkdir(curDir)
-            dirCount +=1
-    else :
-        curDir = targetPath
+    # Set up the (master) target dir if needed
+    if not os.path.isdir(targetPath) and mode != 'test' :
+        os.mkdir(targetPath)
+        dirCount +=1
 
-    # Create log file path
-    if log :
-        logFile = os.path.join(targetPath, 'dataMiner_log.txt')
-        if os.path.isfile(logFile) :
-            os.remove(logFile)
-
-    if sizeMultiplier == 'bt' :
-        ms = fs
-    elif sizeMultiplier == 'kb' :
-        ms = fs * 1024
-    elif sizeMultiplier == 'mb' :
-        ms = fs * 1048576
-    elif sizeMultiplier == 'gb' :
-        ms = fs * 1073741824
+    masterTarget    = targetPath
+    curDir          = ''
 
     terminal('\n\nProcessing files, please wait as this might take a while.')
     for root, dirs, files in os.walk(sourcePath):
         for f in files:
-            if targetDirs :
-                if fileCount >= targetDirs : 
-                    curDir = os.path.join(targetPath, 'dir_' + str(dirCount).zfill(3))
-                    if not os.path.isdir(curDir) :
-                        if mode != 'test' :
-                            os.mkdir(curDir)
-                    fileCount = 0
-                    dirCount +=1
-                    sys.stdout.write('.')
-                    sys.stdout.flush()
-            source = os.path.join(root, f)
-            # Look only at the file type we want
+            totalFiles +=1
+            # We sort by extention
             ext = os.path.splitext(f)
             ext = ext[1].replace('.', '')
-            if ext in fileType :
-                size = os.path.getsize(source)
-                # evaluate by size
-                if ( int(size) >= int(ms) ) :
-                    fileCount +=1
-                    totalFiles +=1
-                    if mode != 'test' :
-                        if mode == 'copy' :
-                            shutil.copy(source, os.path.join(curDir, f))
-                        if mode == 'move' :
-                            shutil.move(source, os.path.join(curDir, f))
-                    if log :
-                        writeToLog(source + ', ' + str(size), logFile)
+            if ext not in fileType :
+                fileType.append(ext)
+            # Add file to dict we will process further down
+#            typeDic[ext].append(os.path.join(sourcePath, f))
+            typeDic[ext].append(os.path.join(root, f))
 
-    terminal('\n\nTotal files copied: ' + str(totalFiles) + ' / Folders created: ' + str(dirCount))
+            # Create a folder for each of the extention types under the
+            # master folder if needed
+            if not os.path.isdir(os.path.join(targetPath, ext)) and mode != 'test' :
+                os.mkdir(os.path.join(targetPath, ext))
+
+
+    # Now process the dict we made
+    for ext, sourceFiles in typeDic.iteritems() :
+#        dirCount = 1
+        # Create initial target folder if needed
+        curDir = os.path.join(targetPath, ext, ext + '_' + str(dirCount).zfill(3))
+        if not os.path.isdir(curDir) and mode != 'test' :
+            os.mkdir(curDir)
+            dirCount +=1
+            fileCount = 1
+        # Loop through the files in this type
+        for source in sourceFiles :
+            if fileCount > maxFiles :
+                curDir = os.path.join(targetPath, ext, ext + '_' + str(dirCount).zfill(3))
+                if not os.path.isdir(curDir) and mode != 'test' :
+                    os.mkdir(curDir)
+                    dirCount +=1
+                    fileCount = 1
+            # Now copy the file over to the target
+            if mode == 'copy' :
+                shutil.copy(source, os.path.join(curDir, os.path.basename(source)))
+            elif mode == 'move' :
+                shutil.move(source, os.path.join(curDir, os.path.basename(source)))
+
+            fileCount +=1
+
+    if  mode == 'test' :
+        terminal('\nRunning in test mode. Found ' + str(totalFiles) + ' files to copy.')
+        terminal('\n\nTotal files: ' + str(totalFiles) + ' / Files Copied: ' + str(fileCount))
+    else :
+        terminal('\n\nTotal files copied: ' + str(fileCount) + ' / Folders created: ' + str(dirCount))
 
     return
 
@@ -218,47 +188,15 @@ def userArguments (args) :
     else :
         sys.exit('\nERROR: No target path was specified')
 
-    # We will only allow the digging to be for more than one type of file at a time
-    # which must be specified in a list.
-    if args.file_type :
-        fileType = args.file_type.lower()
-        if type(fileType) != list :
-            fileType = fileType.split()
-    else :
-        sys.exit('\nERROR: No file type was specified')
-
-    # If this isn't used a default will be assigned
-    if args.size_multiplier :
-        sizeMultiplier = args.size_multiplier
-    else :
-        sizeMultiplier = None
-
-    # Same as the previous setting
-    if args.file_size :
-        fileSize = args.file_size
-    else :
-        fileSize = None
-
-    # The default is None which will cause the script to put all the 
-    # files copied/moved into one folder. Otherwise, the number given
-    # will be the number of files copied into a folder.
-    if args.target_dirs :
-        targetDirs = args.target_dirs
-    else :
-        move = None
-
-    # The default is to copy the file, this gives the option to move it
+    # This sets the mode, copy, move or test
     if args.mode :
         mode = args.mode
     else :
         sys.exit('\nERROR: Mode was not specified')
 
-    # The default is to have no log file.
-    if args.log :
-        log = args.log
 
     # With all our paramters in place we can call the main function
-    dig(sourcePath, targetPath, fileType, sizeMultiplier, fileSize, targetDirs, mode, log)
+    sorter(sourcePath, targetPath, mode)
 
 
 ###############################################################################
@@ -274,19 +212,13 @@ if __name__ == '__main__' :
     # Add help subprocess arguments
     helpCommand = subparsers.add_parser('help', help='General system help')
 
-    sizeType            = ['bt', 'kb', 'mb', 'gb']
     modeType            = ['copy', 'move', 'test']
 
     # Available choices
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--source_path', help='The path to the data to be mined.')
     parser.add_argument('-t', '--target_path', help='The path to where the data that is mined will go.')
-    parser.add_argument('-y', '--file_type', help='The type of file to be mined.')
-    parser.add_argument('-m', '--size_multiplier', choices=sizeType, help='The byte data size multiplier.')
-    parser.add_argument('-f', '--file_size', help='The minumum size of the data files. This number must be a multiple of a byte.')
-    parser.add_argument('-d', '--target_dirs', help='The number of files that will go in a folder. None is the default which means no folders will be made. All the files will be copied/moved into the target path.')
-    parser.add_argument('-o', '--mode', choices=modeType, help='There are three modes this script can run in. Copy files, move files, or just testing to see what files would be copied or moved.')
-    parser.add_argument('-l', '--log', action='store_true', help='This switch will cause a log file to be created in the target folder.')
+    parser.add_argument('-m', '--mode', choices=modeType, help='There are three modes this script can run in. Copy files, move files, or just testing to see what files would be copied or moved.')
 
     # Send the collected arguments to the handler
     userArguments(parser.parse_args())
