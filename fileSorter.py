@@ -32,7 +32,7 @@
 ###############################################################################
 
 # Import all needed Python libs
-import codecs, shutil, os, sys, argparse, timeit
+import shutil, os, sys, argparse, timeit
 from collections import defaultdict
 from datetime import datetime
 from datetime import timedelta
@@ -134,14 +134,20 @@ def sorter (sourcePath, targetPath, mode) :
         # Create initial target folder if needed
         curDir = os.path.join(targetPath, ext, ext + '_' + str(dirCount).zfill(3))
         if not os.path.isdir(curDir) and mode != 'test' :
+            sys.stdout.write('.')
+            sys.stdout.flush()
             os.mkdir(curDir)
             dirCount +=1
             fileCount = 1
         # Loop through the files in this type
         for source in sourceFiles :
             if fileCount > maxFiles :
+#                sys.stdout.write('.')
+#                sys.stdout.flush()
                 curDir = os.path.join(targetPath, ext, ext + '_' + str(dirCount).zfill(3))
                 if not os.path.isdir(curDir) and mode != 'test' :
+                    sys.stdout.write('.')
+                    sys.stdout.flush()
                     os.mkdir(curDir)
                     dirCount +=1
                     fileCount = 1
