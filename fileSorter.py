@@ -89,7 +89,7 @@ def terminal (msg) :
     print wordWrap(msg, 60).encode(sys.getfilesystemencoding())
 
 
-def sorter (sourcePath, targetPath, mode) :
+def sorter (sourcePath, targetPath, mode, numFiles=100) :
     '''Organize the files by type. If fileType is omitted, it will arrange
     all the files in the data set by type.'''
 
@@ -98,7 +98,6 @@ def sorter (sourcePath, targetPath, mode) :
     fileCount = 0
     totalFiles = 0
     dirCount = 1
-    maxFiles = 100
     ext = ''
 
     # Set up the (master) target dir if needed
@@ -119,7 +118,6 @@ def sorter (sourcePath, targetPath, mode) :
             if ext not in fileType :
                 fileType.append(ext)
             # Add file to dict we will process further down
-#            typeDic[ext].append(os.path.join(sourcePath, f))
             typeDic[ext].append(os.path.join(root, f))
 
             # Create a folder for each of the extention types under the
@@ -130,7 +128,6 @@ def sorter (sourcePath, targetPath, mode) :
 
     # Now process the dict we made
     for ext, sourceFiles in typeDic.iteritems() :
-#        dirCount = 1
         # Create initial target folder if needed
         curDir = os.path.join(targetPath, ext, ext + '_' + str(dirCount).zfill(3))
         if not os.path.isdir(curDir) and mode != 'test' :
@@ -141,9 +138,7 @@ def sorter (sourcePath, targetPath, mode) :
             fileCount = 1
         # Loop through the files in this type
         for source in sourceFiles :
-            if fileCount > maxFiles :
-#                sys.stdout.write('.')
-#                sys.stdout.flush()
+            if fileCount > numFiles :
                 curDir = os.path.join(targetPath, ext, ext + '_' + str(dirCount).zfill(3))
                 if not os.path.isdir(curDir) and mode != 'test' :
                     sys.stdout.write('.')
@@ -199,10 +194,13 @@ def userArguments (args) :
         mode = args.mode
     else :
         sys.exit('\nERROR: Mode was not specified')
+        
+    # The default number of files in a folder is 100
+    numFiles = args.file_number
 
 
     # With all our paramters in place we can call the main function
-    sorter(sourcePath, targetPath, mode)
+    sorter(sourcePath, targetPath, mode, numFiles)
 
 
 ###############################################################################
@@ -225,6 +223,7 @@ if __name__ == '__main__' :
     parser.add_argument('-s', '--source_path', help='The path to the data to be mined.')
     parser.add_argument('-t', '--target_path', help='The path to where the data that is mined will go.')
     parser.add_argument('-m', '--mode', choices=modeType, help='There are three modes this script can run in. Copy files, move files, or just testing to see what files would be copied or moved.')
+    parser.add_argument('-f', '--file_number', help='There is an option to set the number of files that will go into the target folder. The default is 100.')
 
     # Send the collected arguments to the handler
     userArguments(parser.parse_args())
